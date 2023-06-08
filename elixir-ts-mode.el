@@ -459,14 +459,14 @@
 
    :language 'elixir
    :feature 'elixir-constant
-   `((binary_operator operator: "|>" right: (identifier)
-                      @font-lock-function-name-face)
+   `(
+		 ;; (binary_operator operator: "|>" right: (identifier)
+     ;;                  @font-lock-function-name-face)
      ((identifier) @font-lock-keyword-face
       (:match ,elixir-ts--builtin-keywords-re
               @font-lock-keyword-face))
      ((identifier) @font-lock-comment-face
       (:match "^_" @font-lock-comment-face))
-     (identifier) @font-lock-function-name-face
      ["%"] @font-lock-keyward-face
      ["," ";"] @font-lock-keyword-face
      ["(" ")" "[" "]" "{" "}" "<<" ">>"] @font-lock-keyword-face)
