@@ -5,7 +5,7 @@
 ;; Author           : Wilhelm H Kirschbaum
 ;; Version          : 1.2
 ;; URL              : https://github.com/wkirschbaum/elixir-ts-mode
-;; Package-Requires : ((emacs "29") (heex-ts-mode "1.2"))
+;; Package-Requires : ((emacs "29"))
 ;; Created          : November 2022
 ;; Keywords         : elixir languages tree-sitter
 
@@ -25,7 +25,7 @@
 ;;; Commentary:
 
 ;; This package defines elixir-ts-mode which is a major mode for editing
-;; Elixir and Heex files.
+;; Elixir files.
 
 ;; Features
 
@@ -41,7 +41,6 @@
 ;;; Code:
 
 (require 'treesit)
-(require 'heex-ts-mode)
 (eval-when-compile (require 'rx))
 
 (declare-function treesit-parser-create "treesit.c")
@@ -485,12 +484,7 @@
    `((escape_sequence) @font-lock-regexp-grouping-backslash))
   "Tree-sitter font-lock settings.")
 
-(defvar elixir-ts--treesit-range-rules
-  (when (treesit-available-p)
-    (treesit-range-rules
-     :embed 'heex
-     :host 'elixir
-     '((sigil (sigil_name) @name (:match "^[HF]$" @name) (quoted_content) @heex)))))
+(defvar elixir-ts--treesit-range-rules)
 
 (defun elixir-ts--forward-sexp (&optional arg)
   "Move forward across one balanced expression (sexp).
@@ -498,9 +492,7 @@ With ARG, do it many times.  Negative ARG means move backward."
   (or arg (setq arg 1))
   (funcall
    (if (> arg 0) #'treesit-end-of-thing #'treesit-beginning-of-thing)
-   (if (eq (treesit-language-at (point)) 'heex)
-       heex-ts--sexp-regexp
-     elixir-ts--sexp-regexp)
+   elixir-ts--sexp-regexp
    (abs arg)))
 
 (defun elixir-ts--treesit-anchor-grand-parent-bol (_n parent &rest _)
@@ -557,8 +549,7 @@ Return nil if NODE is not a defun node or doesn't have a name."
     (_ nil)))
 
 (defvar elixir-ts-mode-default-grammar-sources
-  '((elixir . ("https://github.com/elixir-lang/tree-sitter-elixir.git"))
-    (heex . ("https://github.com/phoenixframework/tree-sitter-heex.git"))))
+  '((elixir . ("https://github.com/elixir-lang/tree-sitter-elixir.git"))))
 
 (defun elixir-ts-install-grammar ()
   "Experimental function to install the tree-sitter-elixir grammar."
@@ -572,12 +563,9 @@ Return nil if NODE is not a defun node or doesn't have a name."
              (format
               (concat "The following language grammar repositories which will be "
                       "downloaded and installed "
-                      "(%s %s), proceed?")
-              (cadr (assoc 'elixir treesit-language-source-alist))
-              (cadr (assoc 'heex treesit-language-source-alist))))
-            (progn
-              (treesit-install-language-grammar 'elixir)
-              (treesit-install-language-grammar 'heex))))
+                      "(%s), proceed?")
+              (cadr (assoc 'elixir treesit-language-source-alist))))
+						(treesit-install-language-grammar 'elixir)))
     (display-warning
      'treesit
      (concat "Cannot install grammar because"
@@ -637,75 +625,38 @@ Return nil if NODE is not a defun node or doesn't have a name."
   (add-hook 'post-self-insert-hook
             #'elixir-ts--electric-pair-string-delimiter 'append t)
 
-  (when (treesit-ready-p 'elixir)
-    ;; The HEEx parser has to be created first for elixir to ensure elixir
-    ;; is the first language when looking for treesit ranges.
-    (when (treesit-ready-p 'heex)
-      ;; Require heex-ts-mode only when we load elixir-ts-mode
-      ;; so that we don't get a tree-sitter compilation warning for
-      ;; elixir-ts-mode.
-      (treesit-parser-create 'heex))
+	(when (treesit-ready-p 'elixir)
+		(treesit-parser-create 'elixir)
+		(setq-local treesit-language-at-point-function 'elixir-ts--treesit-language-at-point)
 
-    (treesit-parser-create 'elixir)
+		;; Imenu.
+		(setq-local treesit-simple-imenu-settings '((nil "\\`call\\'" elixir-ts--defun-p nil)))
 
-    (setq-local treesit-language-at-point-function
-                'elixir-ts--treesit-language-at-point)
+		;; Indent.
+		(setq-local treesit-simple-indent-rules elixir-ts--indent-rules)
 
-    ;; Font-lock.
-    (setq-local treesit-font-lock-settings elixir-ts--font-lock-settings)
-    (setq-local treesit-font-lock-feature-list
-                '(( elixir-comment elixir-constant elixir-doc )
-                  ( elixir-string elixir-keyword elixir-unary-operator
-                    elixir-call elixir-operator )
-                  ( elixir-sigil elixir-string-escape elixir-string-interpolation)))
+		;; Navigation.
+		(setq-local forward-sexp-function #'elixir-ts--forward-sexp)
+		(setq-local treesit-defun-type-regexp '("call" . elixir-ts--defun-p))
 
-    ;; Imenu.
-    (setq-local treesit-simple-imenu-settings
-                '((nil "\\`call\\'" elixir-ts--defun-p nil)))
+		(setq-local treesit-defun-name-function #'elixir-ts--defun-name)
 
-    ;; Indent.
-    (setq-local treesit-simple-indent-rules elixir-ts--indent-rules)
+		;; Font-lock.
+		(setq-local treesit-font-lock-settings elixir-ts--font-lock-settings)
+		(setq-local treesit-font-lock-feature-list
+		 	'((elixir-comment elixir-constant elixir-doc)
+				(elixir-string elixir-keyword elixir-unary-operator elixir-call elixir-operator)
+				(elixir-sigil elixir-string-escape elixir-string-interpolation)))
 
-    ;; Navigation.
-    (setq-local forward-sexp-function #'elixir-ts--forward-sexp)
-    (setq-local treesit-defun-type-regexp
-                '("call" . elixir-ts--defun-p))
-
-    (setq-local treesit-defun-name-function #'elixir-ts--defun-name)
-
-    ;; Embedded Heex.
-    (when (treesit-ready-p 'heex)
-      (setq-local treesit-range-settings elixir-ts--treesit-range-rules)
-
-      (setq-local treesit-simple-indent-rules
-                  (append treesit-simple-indent-rules heex-ts--indent-rules))
-
-      (setq-local treesit-font-lock-settings
-                  (append treesit-font-lock-settings
-                          heex-ts--font-lock-settings))
-
-      (setq-local treesit-simple-indent-rules
-                  (append treesit-simple-indent-rules
-                          heex-ts--indent-rules))
-
-      (setq-local treesit-font-lock-feature-list
-                  '(( elixir-comment elixir-constant elixir-doc
-                      heex-comment heex-keyword heex-doctype )
-                    ( elixir-string elixir-keyword elixir-unary-operator
-                      elixir-call elixir-operator
-                      heex-component heex-tag heex-attribute heex-string)
-                    ( elixir-sigil elixir-string-escape
-                      elixir-string-interpolation ))))
-
-    (treesit-major-mode-setup)
-    (setq-local syntax-propertize-function #'elixir-ts--syntax-propertize)))
+		(treesit-major-mode-setup)
+		(setq-local syntax-propertize-function #'elixir-ts--syntax-propertize)))
 
 ;;;###autoload
 (progn
-      (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode))
-      (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode))
-      (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode))
-      (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode)))
+ (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode))
+ (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode))
+ (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode))
+ (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode)))
 
 (provide 'elixir-ts-mode)
 ;;; elixir-ts-mode.el ends here
