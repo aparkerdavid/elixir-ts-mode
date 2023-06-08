@@ -418,32 +418,44 @@
 
    :language 'elixir
    :feature 'elixir-call
-   `((call
-      target: (identifier) @font-lock-keyword-face
-      (:match ,elixir-ts--definition-keywords-re @font-lock-keyword-face))
-     (call
-      target: (identifier) @font-lock-keyword-face
-      (:match ,elixir-ts--kernel-keywords-re @font-lock-keyword-face))
-     (call
-      target: [(identifier) @font-lock-function-name-face
-               (dot right: (identifier) @font-lock-keyword-face)])
-     (call
-      target: (identifier) @font-lock-keyword-face
-      (arguments
-       [
-        (identifier) @font-lock-keyword-face
-        (binary_operator
-         left: (identifier) @font-lock-keyword-face
-         operator: "when")
-        ])
-      (:match ,elixir-ts--definition-keywords-re @font-lock-keyword-face))
-     (call
-      target: (identifier) @font-lock-keyword-face
-      (arguments
-       (binary_operator
-        operator: "|>"
-        right: (identifier)))
-      (:match ,elixir-ts--definition-keywords-re @font-lock-keyword-face)))
+	 ;; 0-arity definition, without parentheses
+   `((call target: (identifier) @font-lock-keyword-face
+			(:match "^def.*" @font-lock-keyword-face)
+			(arguments (identifier) @font-lock-function-name-face)
+			(do_block))
+
+		 ;; 0-arity definition, without parentheses, comma-do-colon
+		 (call target: (identifier) @font-lock-keyword-face
+			(:match "^def.*" @font-lock-keyword-face)
+			(arguments (identifier) @font-lock-function-name-face
+								 (keywords
+									(pair key: (keyword) value: _))))
+
+		 ;; n-arity definition
+		 (call target: (identifier) @font-lock-keyword-face
+			(:match "^def.*" @font-lock-keyword-face)
+			(arguments
+			 (call target: (identifier) @font-lock-function-name-face)))
+
+		 ;; n-arity definition with guard
+		 (call target: (identifier) @font-lock-keyword-face
+			(:match "^def.*" @font-lock-keyword-face)
+			(arguments
+			 (binary_operator
+				left:
+				(call target: (identifier) @font-lock-function-name-face))))
+
+		 ;; Any call with a do-block is highlighted as a keyword
+		 (call target: (identifier) @font-lock-keyword-face
+					 (arguments _)
+					 (do_block))
+
+		 (call target: (identifier) @font-lock-keyword-face
+					 (do_block))
+
+		 ;; Any call to a kernel keyword is highlighted as a keyword
+		 (call target: (identifier) @font-lock-keyword-face
+					 (:match ,elixir-ts--kernel-keywords-re @font-lock-keyword-face)))
 
    :language 'elixir
    :feature 'elixir-constant
